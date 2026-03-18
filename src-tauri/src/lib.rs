@@ -8,7 +8,7 @@ use std::{
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, Monitor, PhysicalPosition, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    LogicalSize, Manager, Monitor, PhysicalPosition, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     WindowEvent,
 };
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -23,6 +23,10 @@ struct WindowInteractionState {
 const PANEL_MARGIN_RIGHT: i32 = 20;
 const PANEL_MARGIN_BOTTOM: i32 = 20;
 const RESIZE_HIDE_GRACE_PERIOD: Duration = Duration::from_millis(400);
+
+fn physical_to_logical(value: u32, scale_factor: f64) -> f64 {
+    value as f64 / scale_factor
+}
 
 fn should_hide_main_panel_on_focus_loss(
     blur_started_at: Instant,
@@ -81,6 +85,17 @@ fn position_main_panel(window: &WebviewWindow) -> tauri::Result<()> {
     let x = work_area.position.x + work_area.size.width as i32 - size.width as i32 - PANEL_MARGIN_RIGHT;
     let y = work_area.position.y + work_area.size.height as i32 - size.height as i32 - PANEL_MARGIN_BOTTOM;
     window.set_position(PhysicalPosition::new(x, y))?;
+
+    Ok(())
+}
+
+fn resize_main_panel(window: &WebviewWindow, next_height: f64) -> tauri::Result<()> {
+    let current_size = window.inner_size()?;
+    let scale_factor = window.scale_factor()?;
+    let next_width = physical_to_logical(current_size.width, scale_factor);
+
+    window.set_size(LogicalSize::new(next_width, next_height))?;
+    position_main_panel(window)?;
 
     Ok(())
 }
@@ -239,6 +254,15 @@ fn set_main_panel_resize_state(
 }
 
 #[tauri::command]
+fn sync_main_panel_height(app: tauri::AppHandle, height: f64) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .expect("main window should exist");
+
+    resize_main_panel(&window, height).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn update_global_shortcut(
     app: tauri::AppHandle,
     shortcut_state: State<'_, ShortcutStateStore>,
@@ -270,7 +294,8 @@ pub fn run() {
             hide_main_panel,
             close_settings_window,
             commit_text_and_hide,
-            set_main_panel_resize_state
+            set_main_panel_resize_state,
+            sync_main_panel_height
         ])
         .on_window_event(|window, event| {
             if window.label() != "main" {
@@ -362,5 +387,10 @@ mod tests {
             false,
             resize_after_blur
         ));
+    }
+
+    #[test]
+    fn converts_physical_width_to_logical_width_without_outer_frame_drift() {
+        assert_eq!(physical_to_logical(840, 1.5), 560.0);
     }
 }

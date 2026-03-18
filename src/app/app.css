@@ -70,6 +70,11 @@ textarea {
   border-radius: inherit;
 }
 
+.main-window-panel.is-capped {
+  display: flex;
+  flex-direction: column;
+}
+
 .main-window-panel {
   border: 0;
   border-radius: 0;
@@ -208,11 +213,24 @@ textarea {
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
-  height: calc(100% - 40px);
+  min-height: 0;
+  align-content: start;
 }
 
 .panel-editor {
   min-height: 0;
+}
+
+.panel-editor.is-capped {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel-editor.is-capped.has-conflict {
+  display: flex;
+  flex-direction: column;
 }
 
 .conflict-banner {
@@ -293,7 +311,6 @@ textarea {
 .editor-surface textarea,
 .preview-panel {
   width: 100%;
-  height: 100%;
   min-height: 0;
   padding: 8px 4px 6px;
   border: 0;
@@ -304,6 +321,18 @@ textarea {
 .editor-surface {
   position: relative;
   display: block;
+  min-height: 0;
+}
+
+.editor-surface.is-scrollable {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.editor-surface.is-scrollable textarea {
+  flex: 1 1 auto;
   height: 100%;
   min-height: 0;
 }
@@ -384,10 +413,11 @@ textarea {
 
 .editor-surface textarea {
   resize: none;
+  display: block;
   color: #142033;
   line-height: 1.6;
   outline: none;
-  overflow: auto;
+  overflow-x: hidden;
   scrollbar-width: none;
 }
 
@@ -398,7 +428,7 @@ textarea {
 
 .scroll-indicator {
   position: absolute;
-  top: 12px;
+  top: 0;
   right: 0;
   width: 3px;
   height: 38px;

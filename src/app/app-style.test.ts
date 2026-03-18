@@ -12,6 +12,14 @@ describe("panel shell styling", () => {
     expect(css).toContain(".main-window-panel {");
     expect(css).toContain("border-radius: 0;");
     expect(css).toContain("box-shadow: none;");
+    expect(css).toContain(".main-window-panel.is-capped {");
+    expect(css).toContain("flex-direction: column;");
+    expect(css).toContain(".panel-editor.is-capped {");
+    expect(css).toContain("display: flex;");
+    expect(css).toContain(".editor-surface.is-scrollable {");
+    expect(css).toContain("display: flex;");
+    expect(css).toContain(".editor-surface.is-scrollable textarea {");
+    expect(css).toContain("flex: 1 1 auto;");
   });
 
   it("does not apply the narrow mobile layout to the default desktop panel width", () => {
