@@ -17,4 +17,12 @@ describe("App main panel", () => {
     expect(markup).toContain("Markdown");
     expect(markup).toContain("textarea");
   });
+
+  it("shows the editor hint instead of seeding default sample text", () => {
+    const markup = renderToStaticMarkup(<App />);
+
+    expect(markup).toContain('placeholder="Paste or type here, then press Ctrl+Enter to copy back and hide."');
+    expect(markup).not.toContain("Paste or type here, then press Ctrl+Enter to copy back and hide.</textarea>");
+    expect(markup).not.toContain("# Quick Text Panel");
+  });
 });

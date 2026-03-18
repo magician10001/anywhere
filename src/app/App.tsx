@@ -30,9 +30,7 @@ import {
 import { getPanelShortcutAction } from "../features/window/panel-shortcuts";
 import { useScrollIndicator } from "../features/window/use-scroll-indicator";
 
-const SAMPLE_TEXT = `# Quick Text Panel
-
-Paste or type here, then press Ctrl+Enter to copy back and hide.`;
+const EDITOR_HINT = "Paste or type here, then press Ctrl+Enter to copy back and hide.";
 type PanelResizeDirection =
   | "East"
   | "North"
@@ -90,12 +88,12 @@ export function App() {
   const [settings, setSettings] = useState(() => loadSettings());
   const [state, setState] = useState(() =>
     createInitialSessionState({
-      text: SAMPLE_TEXT,
+      text: "",
       mode: loadSettings().defaultMode,
-      sourceClipboardText: SAMPLE_TEXT
+      sourceClipboardText: ""
     })
   );
-  const [status, setStatus] = useState("Loaded sample clipboard text");
+  const [status, setStatus] = useState("Ready");
   const [pendingConflict, setPendingConflict] = useState<Extract<ResolveEditorResult, { kind: "conflict" }> | null>(null);
   const [hotkeyDraft, setHotkeyDraft] = useState(settings.hotkey);
   const [panelHeight, setPanelHeight] = useState(PANEL_DEFAULT_HEIGHT);
@@ -126,7 +124,7 @@ export function App() {
 
     async function loadClipboard() {
       try {
-        const clipboardText = isTauriRuntime() ? await readText() : SAMPLE_TEXT;
+        const clipboardText = isTauriRuntime() ? await readText() : "";
         const draft = loadDraft();
 
         if (!cancelled) {
@@ -293,9 +291,9 @@ export function App() {
     if (resolved.kind === "load-clipboard") {
       setState(
         createInitialSessionState({
-          text: resolved.text || SAMPLE_TEXT,
+          text: resolved.text ?? "",
           mode: settings.defaultMode,
-          sourceClipboardText: resolved.text || SAMPLE_TEXT
+          sourceClipboardText: resolved.text ?? ""
         })
       );
       setPendingConflict(null);
@@ -568,6 +566,7 @@ export function App() {
           <label ref={editorSurfaceRef} className={`editor-surface ${isPanelCapped ? "is-scrollable" : ""}`}>
             <span className="visually-hidden">Editor</span>
             <textarea
+              placeholder={EDITOR_HINT}
               style={
                 textareaHeight === null
                   ? { overflowY: textareaOverflowY }
