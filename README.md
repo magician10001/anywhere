@@ -73,3 +73,9 @@ Successful Windows bundles are produced at:
 - `src/features/window/use-scroll-indicator.ts`
 - `src-tauri/src/lib.rs`
 - `src-tauri/tauri.conf.json`
+
+## Developer Notes
+
+For a faster handoff into a new conversation or a new agent session, see:
+
+- `docs/development-handoff.md`
