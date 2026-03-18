@@ -14,7 +14,7 @@ describe("App main panel", () => {
     const markup = renderToStaticMarkup(<App />);
 
     expect(markup).not.toContain("<h1>Clipboard scratchpad</h1>");
-    expect(markup).not.toContain('<p class="eyebrow">Quick Text Panel</p>');
+    expect(markup).not.toContain('<p class="eyebrow">Anywhere</p>');
     expect(markup).not.toContain("Settings");
     expect(markup).toContain("Plain Text");
     expect(markup).toContain("Markdown");
@@ -26,7 +26,7 @@ describe("App main panel", () => {
 
     expect(markup).toContain('placeholder="Paste or type here, then press Ctrl+Enter to copy back and hide."');
     expect(markup).not.toContain("Paste or type here, then press Ctrl+Enter to copy back and hide.</textarea>");
-    expect(markup).not.toContain("# Quick Text Panel");
+    expect(markup).not.toContain("# Anywhere");
   });
 
   it("shows a preview toggle when markdown is the active mode", () => {

@@ -1,81 +1,88 @@
-# Quick Text Panel
+<p align="center">
+  <img src="./src-tauri/icons/128x128.png" alt="Anywhere icon" width="96" height="96" />
+</p>
 
-Quick Text Panel is a Windows tray utility for temporarily editing clipboard text in a lightweight floating panel.
+<h1 align="center">Anywhere</h1>
 
-## Current Status
+<p align="center">
+  A fast Windows tray clipboard scratchpad with a lightweight floating editor, Markdown preview, and keyboard-first workflow.
+</p>
 
-The app is now usable as a local Windows build:
+## Overview
 
-- tray resident with `Show`, `Hide`, `Settings`, and `Quit`
-- global hotkey registration and live hotkey updates from the settings window
-- separate settings window opened from the tray menu
-- frameless floating main panel shown near the bottom-right work area
-- plain text and Markdown source editing modes
-- `Esc` hides the panel
-- `Ctrl+Enter` copies editor text back to the clipboard and hides the panel
-- draft preservation plus clipboard-vs-draft conflict recovery
-- capped panel auto-grow with hidden-at-rest editor scrollbar behavior
-- Windows-native undecorated main window styling, with the panel content aligned to the native shell instead of a nested faux card
+Anywhere is a desktop utility for quickly pulling text out of the clipboard, editing it in a focused floating panel, and sending it back without the friction of opening a full editor.
 
-## What The App Currently Feels Like
+It is designed for short-lived writing and transformation tasks: rewriting copied text, cleaning Markdown, fixing formatting, or staging clipboard content before pasting it elsewhere.
 
-The main panel is intentionally not a full desktop window. It is a frameless floating editor with:
+## Features
 
-- a compact mode switch strip
-- editor-first layout
-- native Windows undecorated rounded window chrome
-- hidden taskbar entry for the main panel
-- tray-driven settings access
-- automatic hide on focus loss
+- Lightweight tray-first workflow with `Show`, `Hide`, `Settings`, and `Quit`
+- Global hotkey support with live updates from the settings window
+- Frameless floating panel anchored near the lower-right work area
+- Plain text and Markdown editing modes
+- Docked Markdown preview without sacrificing editor space
+- Auto-growing panel behavior with capped internal scrolling
+- Draft preservation and clipboard-vs-draft conflict recovery
+- Keyboard-first interactions including `Esc` to hide and `Ctrl+Enter` to copy back and dismiss
 
-## Current Gaps
+## Why Anywhere
 
-These are the main polish items still open:
+- Fast to open, use, and dismiss
+- Purpose-built for transient clipboard editing rather than document management
+- Native-feeling window behavior with minimal chrome and tray-driven access
+- Small, focused codebase built with modern Tauri, React, and TypeScript
 
-- the switch back to Windows-native undecorated corners needs a final manual visual pass in dev mode
-- README-level architecture notes are brief and not yet split into a dedicated architecture doc
-- the plan document is partially executed but not yet fully checked off line by line
-- there are no end-to-end GUI tests yet
-
-## Development
+## Getting Started
 
 ### Prerequisites
 
 - Node.js
 - Rust toolchain
-- Visual Studio Build Tools with MSVC for Windows packaging
+- Visual Studio Build Tools with MSVC when building Windows installers
 
-### Commands
+### Development
 
 ```bash
 npm install
 npm run test
 npm run build
 npm run tauri:dev
+```
+
+### Production Build
+
+```bash
 npm run tauri:build
 ```
 
-### Installer Output
+Windows bundles are emitted under `src-tauri/target/release/bundle/`.
 
-Successful Windows bundles are produced at:
+## Tech Stack
 
-- `src-tauri/target/release/bundle/msi/Quick Text Panel_0.1.0_x64_en-US.msi`
-- `src-tauri/target/release/bundle/nsis/Quick Text Panel_0.1.0_x64-setup.exe`
+- Tauri 2
+- React 19
+- TypeScript
+- Vitest
+- Rust
 
-## Key Files
+## Project Structure
 
-- `src/app/App.tsx`
-- `src/app/app.css`
-- `src/features/editor/editor-state.ts`
-- `src/features/settings/settings-store.ts`
-- `src/features/window/panel-metrics.ts`
-- `src/features/window/panel-shortcuts.ts`
-- `src/features/window/use-scroll-indicator.ts`
-- `src-tauri/src/lib.rs`
-- `src-tauri/tauri.conf.json`
+- `src/app` - application shell, layout, and window-specific UI
+- `src/features/editor` - editor session state, draft persistence, and Markdown preview rendering
+- `src/features/settings` - settings persistence and hotkey helpers
+- `src/features/window` - panel sizing, shortcuts, and scroll indicator behavior
+- `src-tauri/src/lib.rs` - native window lifecycle, tray integration, clipboard commit, and hotkey wiring
 
-## Developer Notes
+## Roadmap
 
-For a faster handoff into a new conversation or a new agent session, see:
+- Additional Markdown rendering polish and visual refinements
+- End-to-end GUI coverage for critical flows
+- Continued fit-and-finish work on Windows-native panel behavior
 
-- `docs/development-handoff.md`
+## Contributing
+
+This project is currently optimized for local development on Windows. If you want to contribute, start by running the test suite and `tauri:dev`, then keep changes aligned with the existing lightweight, editor-first interaction model.
+
+## License
+
+MIT

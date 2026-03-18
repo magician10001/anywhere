@@ -146,9 +146,9 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         .items(&[&show, &hide, &settings, &quit])
         .build()?;
 
-    TrayIconBuilder::new()
+    let mut tray = TrayIconBuilder::new()
         .menu(&menu)
-        .tooltip("Quick Text Panel")
+        .tooltip("Anywhere")
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
@@ -172,8 +172,13 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             }
             "quit" => app.exit(0),
             _ => {}
-        })
-        .build(app)?;
+        });
+
+    if let Some(icon) = app.default_window_icon().cloned() {
+        tray = tray.icon(icon);
+    }
+
+    tray.build(app)?;
 
     Ok(())
 }
@@ -186,7 +191,7 @@ fn show_settings_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     }
 
     WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("index.html".into()))
-        .title("Quick Text Panel Settings")
+        .title("Anywhere Settings")
         .inner_size(620.0, 420.0)
         .resizable(false)
         .transparent(false)

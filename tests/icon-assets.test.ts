@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 describe("application icon assets", () => {
   it("keeps generated desktop icon files alongside the tauri bundle config", () => {
     const tauriConfig = readFileSync(resolve(process.cwd(), "src-tauri/tauri.conf.json"), "utf8");
+    const tauriSource = readFileSync(resolve(process.cwd(), "src-tauri/src/lib.rs"), "utf8");
 
     expect(existsSync(resolve(process.cwd(), "src-tauri/icons/icon.ico"))).toBe(true);
     expect(existsSync(resolve(process.cwd(), "src-tauri/icons/128x128.png"))).toBe(true);
@@ -15,5 +16,7 @@ describe("application icon assets", () => {
     expect(tauriConfig).toContain('"icons/128x128@2x.png"');
     expect(tauriConfig).toContain('"icons/icon.icns"');
     expect(tauriConfig).toContain('"icons/icon.ico"');
+    expect(tauriSource).toContain("default_window_icon()");
+    expect(tauriSource).toContain(".icon(icon)");
   });
 });

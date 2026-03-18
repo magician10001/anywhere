@@ -7,7 +7,7 @@ edition = "2021"
 license = "MIT"
 
 [package.metadata]
-product-name = "Quick Text Panel"
+product-name = "Anywhere"
 
 [lib]
 name = "quick_text_panel_lib"

@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Quick Text Panel",
+  "productName": "Anywhere",
   "version": "0.1.0",
   "identifier": "com.czm.quicktextpanel",
   "build": {
@@ -17,7 +17,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Quick Text Panel",
+        "title": "Anywhere",
         "width": 560,
         "height": 360,
         "minWidth": 460,

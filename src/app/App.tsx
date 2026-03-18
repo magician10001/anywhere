@@ -479,7 +479,7 @@ export function App() {
         <section className="panel settings-window-panel">
           <header className="settings-titlebar">
             <div className="settings-titlecopy" data-tauri-drag-region>
-              <p className="eyebrow">Quick Text Panel</p>
+              <p className="eyebrow">Anywhere</p>
               <strong>Settings</strong>
             </div>
             <button
