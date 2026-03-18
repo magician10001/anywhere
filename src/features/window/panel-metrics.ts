@@ -36,6 +36,32 @@ export const PANEL_MARGINS: PanelMargins = {
   bottom: 20
 };
 
+export function getWorkspaceWidth(input: {
+  editorWidth: number;
+  previewOpen: boolean;
+  previewWidth: number;
+  gap: number;
+}): number {
+  return input.previewOpen
+    ? input.editorWidth + input.previewWidth + input.gap
+    : input.editorWidth;
+}
+
+export function getEditorWidthFromFrame(input: {
+  frameWidth: number;
+  previewOpen: boolean;
+  previewWidth: number;
+  gap: number;
+  minEditorWidth: number;
+}): number {
+  return Math.max(
+    input.previewOpen
+      ? input.frameWidth - input.previewWidth - input.gap
+      : input.frameWidth,
+    input.minEditorWidth
+  );
+}
+
 export function clampPanelHeight(value: number, limits: { min: number; max: number }): number {
   return Math.min(limits.max, Math.max(limits.min, value));
 }

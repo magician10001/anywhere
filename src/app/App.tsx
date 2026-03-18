@@ -13,6 +13,7 @@ import {
   type SessionState
 } from "../features/editor/editor-state";
 import { clearDraft, loadDraft, saveDraft } from "../features/editor/draft-storage";
+import { renderMarkdownPreview } from "../features/editor/markdown-preview";
 import {
   captureHotkeyFromEvent,
   formatHotkeyForTauri,
@@ -21,16 +22,22 @@ import {
   saveSettings
 } from "../features/settings/settings-store";
 import {
+  getEditorWidthFromFrame,
   getEditorLayout,
   getScrollIndicatorLayout,
+  getWorkspaceWidth,
   PANEL_DEFAULT_HEIGHT,
+  PANEL_DEFAULT_WIDTH,
   PANEL_MAX_HEIGHT,
-  PANEL_MIN_HEIGHT
+  PANEL_MIN_HEIGHT,
+  PANEL_MIN_WIDTH
 } from "../features/window/panel-metrics";
 import { getPanelShortcutAction } from "../features/window/panel-shortcuts";
 import { useScrollIndicator } from "../features/window/use-scroll-indicator";
 
 const EDITOR_HINT = "Paste or type here, then press Ctrl+Enter to copy back and hide.";
+const PREVIEW_DOCK_WIDTH = 420;
+const PREVIEW_DOCK_GAP = 16;
 type PanelResizeDirection =
   | "East"
   | "North"
@@ -51,15 +58,6 @@ const PANEL_RESIZE_DIRECTIONS: PanelResizeDirection[] = [
   "SouthWest"
 ];
 
-function previewMarkdown(text: string): string {
-  return text
-    .replace(/^### (.*)$/gim, "<h3>$1</h3>")
-    .replace(/^## (.*)$/gim, "<h2>$1</h2>")
-    .replace(/^# (.*)$/gim, "<h1>$1</h1>")
-    .replace(/\*\*(.*?)\*\*/gim, "<strong>$1</strong>")
-    .replace(/\n/g, "<br />");
-}
-
 function changeMode(state: SessionState, mode: EditorMode): SessionState {
   return applySessionAction(state, {
     type: "mode-changed",
@@ -76,7 +74,11 @@ function currentWindowLabel(): "main" | "settings" {
     return "main";
   }
 
-  return getCurrentWindow().label === "settings" ? "settings" : "main";
+  if (getCurrentWindow().label === "settings") {
+    return "settings";
+  }
+
+  return "main";
 }
 
 const SCROLL_INDICATOR_HEIGHT = 38;
@@ -97,6 +99,7 @@ export function App() {
   const [pendingConflict, setPendingConflict] = useState<Extract<ResolveEditorResult, { kind: "conflict" }> | null>(null);
   const [hotkeyDraft, setHotkeyDraft] = useState(settings.hotkey);
   const [panelHeight, setPanelHeight] = useState(PANEL_DEFAULT_HEIGHT);
+  const [editorWidth, setEditorWidth] = useState(PANEL_DEFAULT_WIDTH);
   const [textareaHeight, setTextareaHeight] = useState<number | null>(null);
   const [textareaOverflowY, setTextareaOverflowY] = useState<"hidden" | "auto">("hidden");
   const [isPanelCapped, setIsPanelCapped] = useState(false);
@@ -108,7 +111,7 @@ export function App() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isProgrammaticResizeRef = useRef(false);
   const { visible: showScrollIndicator, onScroll: handleScrollIndicator } = useScrollIndicator();
-  const previewHtml = previewMarkdown(state.text);
+  const previewHtml = renderMarkdownPreview(state.text);
 
   useEffect(() => {
     if (windowKind !== "main") {
@@ -181,10 +184,20 @@ export function App() {
     void getCurrentWindow().onResized(({ payload: size }) => {
       const scaleFactor = window.devicePixelRatio || 1;
       const nextLogicalHeight = Math.round(size.height / scaleFactor);
+      const nextLogicalWidth = Math.round(size.width / scaleFactor);
 
       setPanelHeight(nextLogicalHeight);
 
       if (!isProgrammaticResizeRef.current) {
+        setEditorWidth(
+          getEditorWidthFromFrame({
+            frameWidth: nextLogicalWidth,
+            previewOpen: state.previewOpen,
+            previewWidth: PREVIEW_DOCK_WIDTH,
+            gap: PREVIEW_DOCK_GAP,
+            minEditorWidth: PANEL_MIN_WIDTH
+          })
+        );
         setManualHeightLocked(true);
       }
     }).then((nextUnlistenResize) => {
@@ -195,7 +208,7 @@ export function App() {
       unlisten?.();
       unlistenResize?.();
     };
-  }, [windowKind]);
+  }, [state.previewOpen, windowKind]);
 
   useLayoutEffect(() => {
     if (windowKind !== "main") {
@@ -232,28 +245,34 @@ export function App() {
     }
 
     async function syncPanelGeometry() {
-      if (manualHeightLocked) {
-        return;
-      }
-
       const currentSize = await getCurrentWindow().innerSize();
       const scaleFactor = window.devicePixelRatio || 1;
       const currentLogicalHeight = Math.round(currentSize.height / scaleFactor) || PANEL_DEFAULT_HEIGHT;
-      const nextLogicalHeight = nextLayout.capped
-        ? Math.max(currentLogicalHeight, nextLayout.panelHeight)
-        : nextLayout.panelHeight;
+      const currentLogicalWidth = Math.round(currentSize.width / scaleFactor) || PANEL_DEFAULT_WIDTH;
+      const nextLogicalHeight = manualHeightLocked
+        ? currentLogicalHeight
+        : nextLayout.capped
+          ? Math.max(currentLogicalHeight, nextLayout.panelHeight)
+          : nextLayout.panelHeight;
+      const nextLogicalWidth = getWorkspaceWidth({
+        editorWidth,
+        previewOpen: state.previewOpen,
+        previewWidth: PREVIEW_DOCK_WIDTH,
+        gap: PREVIEW_DOCK_GAP
+      });
 
       setPanelHeight(nextLogicalHeight);
 
-      if (nextLogicalHeight === currentLogicalHeight) {
+      if (nextLogicalHeight === currentLogicalHeight && nextLogicalWidth === currentLogicalWidth) {
         return;
       }
 
       isProgrammaticResizeRef.current = true;
 
       try {
-        await invoke("sync_main_panel_height", {
-          height: nextLogicalHeight
+        await invoke("sync_main_panel_frame", {
+          height: nextLogicalHeight,
+          width: nextLogicalWidth
         });
       } finally {
         window.setTimeout(() => {
@@ -263,7 +282,7 @@ export function App() {
     }
 
     void syncPanelGeometry();
-  }, [manualHeightLocked, panelHeight, pendingConflict, state.text, windowKind]);
+  }, [editorWidth, manualHeightLocked, panelHeight, pendingConflict, state.previewOpen, state.text, windowKind]);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -424,6 +443,36 @@ export function App() {
     }
   }
 
+  async function switchEditorMode(mode: EditorMode) {
+    if (windowKind !== "main") {
+      return;
+    }
+
+    const nextState = changeMode(state, mode);
+
+    updateState(nextState);
+    const nextSettings = saveSettings({ defaultMode: mode });
+    setSettings(nextSettings);
+  }
+
+  async function togglePreviewWindow() {
+    if (windowKind !== "main" || state.mode !== "markdown") {
+      return;
+    }
+
+    if (!state.previewOpen) {
+      const measuredEditorWidth = Math.round(panelRef.current?.getBoundingClientRect().width ?? editorWidth);
+      setEditorWidth(Math.max(measuredEditorWidth, PANEL_MIN_WIDTH));
+    }
+
+    updateState(
+      applySessionAction(state, {
+        type: "preview-toggled"
+      })
+    );
+    setStatus(state.previewOpen ? "Closed markdown preview" : "Opened markdown preview");
+  }
+
   if (windowKind === "settings") {
     return (
       <main className="settings-shell">
@@ -493,128 +542,128 @@ export function App() {
 
   return (
     <main className="panel-frame">
-      <section
-        ref={panelRef}
-        className={`panel panel-shell main-window-panel ${isPanelCapped ? "is-capped" : ""}`}
-        style={{ height: `${Math.max(panelHeight, PANEL_DEFAULT_HEIGHT)}px` }}
-      >
-        {PANEL_RESIZE_DIRECTIONS.map((direction) => (
-          <button
-            aria-hidden="true"
-            className={`resize-handle resize-${direction.toLowerCase()}`}
-            key={direction}
-            onPointerDown={(event) => {
-              event.preventDefault();
-              void startPanelResize(direction);
-            }}
-            tabIndex={-1}
-            type="button"
-          />
-        ))}
-        <header className="panel-strip">
-          <div className="segmented-control compact-control" role="tablist" aria-label="Editor mode">
-            <button
-              className={state.mode === "plain-text" ? "active" : ""}
-              onClick={() => {
-                const nextState = changeMode(state, "plain-text");
-                updateState(nextState);
-                const nextSettings = saveSettings({ defaultMode: "plain-text" });
-                setSettings(nextSettings);
-              }}
-              type="button"
-            >
-              Plain Text
-            </button>
-            <button
-              className={state.mode === "markdown" ? "active" : ""}
-              onClick={() => {
-                const nextState = changeMode(state, "markdown");
-                updateState(nextState);
-                const nextSettings = saveSettings({ defaultMode: "markdown" });
-                setSettings(nextSettings);
-              }}
-              type="button"
-            >
-              Markdown
-            </button>
-          </div>
-          <p className="panel-status" aria-live="polite">
-            {status}
-          </p>
-        </header>
-
+      <section className={`workspace-frame ${state.previewOpen ? "with-preview" : ""}`}>
+        {state.previewOpen ? (
+          <aside className="preview-dock" aria-label="Markdown preview">
+            <div className="preview-dock-body" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+          </aside>
+        ) : null}
         <section
-          className={`editor-layout panel-editor ${state.previewOpen ? "with-preview" : ""} ${isPanelCapped ? "is-capped" : ""} ${pendingConflict ? "has-conflict" : ""}`}
+          ref={panelRef}
+          className={`panel panel-shell main-window-panel ${isPanelCapped ? "is-capped" : ""}`}
+          style={{ height: `${Math.max(panelHeight, PANEL_DEFAULT_HEIGHT)}px` }}
         >
-          {pendingConflict ? (
-            <section className="conflict-banner" aria-live="polite">
-              <div>
-                <strong>Clipboard changed</strong>
-                <p>Choose whether to keep your unfinished draft or replace it with the new clipboard text.</p>
-              </div>
-              <div className="footer-actions">
-                <button className="secondary-button" onClick={() => chooseConflict("clipboard")} type="button">
-                  Load Clipboard
-                </button>
-                <button className="primary-button" onClick={() => chooseConflict("draft")} type="button">
-                  Restore Draft
-                </button>
-              </div>
-            </section>
-          ) : null}
-
-          <label ref={editorSurfaceRef} className={`editor-surface ${isPanelCapped ? "is-scrollable" : ""}`}>
-            <span className="visually-hidden">Editor</span>
-            <textarea
-              placeholder={EDITOR_HINT}
-              style={
-                textareaHeight === null
-                  ? { overflowY: textareaOverflowY }
-                  : { height: `${textareaHeight}px`, overflowY: textareaOverflowY }
-              }
-              onKeyDown={(event) => {
-                const action = getPanelShortcutAction(event);
-
-                if (action === "copy-and-hide") {
-                  event.preventDefault();
-                  void handleCopyAndHide();
-                }
-
-                if (action === "hide") {
-                  event.preventDefault();
-                  void handleHide();
-                }
-              }}
-              onScroll={(event) => {
-                const element = event.currentTarget;
-                const maxScroll = element.scrollHeight - element.clientHeight;
-                setScrollProgress(maxScroll > 0 ? element.scrollTop / maxScroll : 0);
-                handleScrollIndicator();
-              }}
-              ref={textareaRef}
-              onChange={(event) =>
-                updateState(
-                  applySessionAction(state, {
-                    type: "text-changed",
-                    text: event.target.value
-                  })
-                )
-              }
-              spellCheck={state.mode === "plain-text"}
-              value={state.text}
-            />
-            <span
+          {PANEL_RESIZE_DIRECTIONS.map((direction) => (
+            <button
               aria-hidden="true"
-              className={`scroll-indicator ${showScrollIndicator ? "visible" : ""}`}
-              style={{ transform: `translateY(${scrollIndicatorOffsetY}px)` }}
+              className={`resize-handle resize-${direction.toLowerCase()}`}
+              key={direction}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                void startPanelResize(direction);
+              }}
+              tabIndex={-1}
+              type="button"
             />
-          </label>
+          ))}
+          <header className="panel-strip">
+            <div className="panel-toolbar">
+              <div className="segmented-control compact-control" role="tablist" aria-label="Editor mode">
+                <button
+                  className={state.mode === "plain-text" ? "active" : ""}
+                  onClick={() => void switchEditorMode("plain-text")}
+                  type="button"
+                >
+                  Plain Text
+                </button>
+                <button
+                  className={state.mode === "markdown" ? "active" : ""}
+                  onClick={() => void switchEditorMode("markdown")}
+                  type="button"
+                >
+                  Markdown
+                </button>
+              </div>
+              {state.mode === "markdown" ? (
+                  <button
+                    className={`preview-toggle ${state.previewOpen ? "active" : ""}`}
+                    onClick={() => void togglePreviewWindow()}
+                    type="button"
+                  >
+                    Preview
+                  </button>
+                ) : null}
+            </div>
+            <p className="panel-status" aria-live="polite">
+              {status}
+            </p>
+          </header>
 
-          {state.previewOpen ? (
-            <aside className="preview-panel" aria-label="Markdown preview">
-              <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
-            </aside>
-          ) : null}
+          <section className={`editor-layout panel-editor ${isPanelCapped ? "is-capped" : ""} ${pendingConflict ? "has-conflict" : ""}`}>
+            {pendingConflict ? (
+              <section className="conflict-banner" aria-live="polite">
+                <div>
+                  <strong>Clipboard changed</strong>
+                  <p>Choose whether to keep your unfinished draft or replace it with the new clipboard text.</p>
+                </div>
+                <div className="footer-actions">
+                  <button className="secondary-button" onClick={() => chooseConflict("clipboard")} type="button">
+                    Load Clipboard
+                  </button>
+                  <button className="primary-button" onClick={() => chooseConflict("draft")} type="button">
+                    Restore Draft
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            <label ref={editorSurfaceRef} className={`editor-surface ${isPanelCapped ? "is-scrollable" : ""}`}>
+              <span className="visually-hidden">Editor</span>
+              <textarea
+                placeholder={EDITOR_HINT}
+                style={
+                  textareaHeight === null
+                    ? { overflowY: textareaOverflowY }
+                    : { height: `${textareaHeight}px`, overflowY: textareaOverflowY }
+                }
+                onKeyDown={(event) => {
+                  const action = getPanelShortcutAction(event);
+
+                  if (action === "copy-and-hide") {
+                    event.preventDefault();
+                    void handleCopyAndHide();
+                  }
+
+                  if (action === "hide") {
+                    event.preventDefault();
+                    void handleHide();
+                  }
+                }}
+                onScroll={(event) => {
+                  const element = event.currentTarget;
+                  const maxScroll = element.scrollHeight - element.clientHeight;
+                  setScrollProgress(maxScroll > 0 ? element.scrollTop / maxScroll : 0);
+                  handleScrollIndicator();
+                }}
+                ref={textareaRef}
+                onChange={(event) =>
+                  updateState(
+                    applySessionAction(state, {
+                      type: "text-changed",
+                      text: event.target.value
+                    })
+                  )
+                }
+                spellCheck={state.mode === "plain-text"}
+                value={state.text}
+              />
+              <span
+                aria-hidden="true"
+                className={`scroll-indicator ${showScrollIndicator ? "visible" : ""}`}
+                style={{ transform: `translateY(${scrollIndicatorOffsetY}px)` }}
+              />
+            </label>
+          </section>
         </section>
       </section>
     </main>

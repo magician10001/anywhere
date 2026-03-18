@@ -5,8 +5,9 @@ import { resolve } from "node:path";
 describe("panel shell styling", () => {
   it("clips inner layers to the panel radius", () => {
     const css = readFileSync(resolve(process.cwd(), "src/app/app.css"), "utf8");
+    const appSource = readFileSync(resolve(process.cwd(), "src/app/App.tsx"), "utf8");
 
-    expect(css).toContain(".panel {\n");
+    expect(css).toContain(".panel {");
     expect(css).toContain("overflow: hidden;");
     expect(css).toContain("border-radius: inherit;");
     expect(css).toContain(".main-window-panel {");
@@ -20,6 +21,11 @@ describe("panel shell styling", () => {
     expect(css).toContain("display: flex;");
     expect(css).toContain(".editor-surface.is-scrollable textarea {");
     expect(css).toContain("flex: 1 1 auto;");
+    expect(css).toContain(".workspace-frame.with-preview {");
+    expect(css).toContain("grid-template-columns: 420px minmax(0, 1fr);");
+    expect(css).toContain(".panel-frame {\n  width: 100%;\n  height: 100vh;\n  padding: 0;\n  background: #eef2f7;");
+    expect(appSource).toContain("workspace-frame");
+    expect(appSource).toContain("preview-dock");
   });
 
   it("does not apply the narrow mobile layout to the default desktop panel width", () => {

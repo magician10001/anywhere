@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   clampPanelHeight,
+  getEditorWidthFromFrame,
   getEditorLayout,
   getPanelAnchor,
   getScrollIndicatorLayout,
+  getWorkspaceWidth,
   PANEL_DEFAULT_HEIGHT,
   PANEL_DEFAULT_WIDTH,
   PANEL_MIN_HEIGHT,
@@ -38,6 +40,31 @@ describe("getPanelAnchor", () => {
         { right: 20, bottom: 20 }
       )
     ).toEqual({ x: 1160, y: 560 });
+  });
+});
+
+describe("preview workspace sizing", () => {
+  it("expands the frame width by the preview dock and gap", () => {
+    expect(
+      getWorkspaceWidth({
+        editorWidth: 560,
+        previewOpen: true,
+        previewWidth: 420,
+        gap: 16
+      })
+    ).toBe(996);
+  });
+
+  it("derives the editor width back from a preview-open frame width", () => {
+    expect(
+      getEditorWidthFromFrame({
+        frameWidth: 996,
+        previewOpen: true,
+        previewWidth: 420,
+        gap: 16,
+        minEditorWidth: 460
+      })
+    ).toBe(560);
   });
 });
 

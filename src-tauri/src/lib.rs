@@ -24,10 +24,6 @@ const PANEL_MARGIN_RIGHT: i32 = 20;
 const PANEL_MARGIN_BOTTOM: i32 = 20;
 const RESIZE_HIDE_GRACE_PERIOD: Duration = Duration::from_millis(400);
 
-fn physical_to_logical(value: u32, scale_factor: f64) -> f64 {
-    value as f64 / scale_factor
-}
-
 fn should_hide_main_panel_on_focus_loss(
     blur_started_at: Instant,
     resize_in_progress: bool,
@@ -89,12 +85,15 @@ fn position_main_panel(window: &WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
 
-fn resize_main_panel(window: &WebviewWindow, next_height: f64) -> tauri::Result<()> {
-    let current_size = window.inner_size()?;
+fn resize_main_panel(window: &WebviewWindow, next_width: f64, next_height: f64) -> tauri::Result<()> {
+    let Some(monitor) = active_monitor(window)? else {
+        return Ok(());
+    };
     let scale_factor = window.scale_factor()?;
-    let next_width = physical_to_logical(current_size.width, scale_factor);
+    let max_width = monitor.work_area().size.width as f64 / scale_factor - PANEL_MARGIN_RIGHT as f64;
+    let clamped_width = next_width.min(max_width.max(0.0));
 
-    window.set_size(LogicalSize::new(next_width, next_height))?;
+    window.set_size(LogicalSize::new(clamped_width, next_height))?;
     position_main_panel(window)?;
 
     Ok(())
@@ -254,12 +253,12 @@ fn set_main_panel_resize_state(
 }
 
 #[tauri::command]
-fn sync_main_panel_height(app: tauri::AppHandle, height: f64) -> Result<(), String> {
+fn sync_main_panel_frame(app: tauri::AppHandle, width: f64, height: f64) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .expect("main window should exist");
 
-    resize_main_panel(&window, height).map_err(|error| error.to_string())
+    resize_main_panel(&window, width, height).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -295,7 +294,7 @@ pub fn run() {
             close_settings_window,
             commit_text_and_hide,
             set_main_panel_resize_state,
-            sync_main_panel_height
+            sync_main_panel_frame
         ])
         .on_window_event(|window, event| {
             if window.label() != "main" {
@@ -328,7 +327,8 @@ pub fn run() {
 
                         if let Some(window) = app.get_webview_window("main") {
                             let should_hide =
-                                window.is_visible().unwrap_or(false) && !window.is_focused().unwrap_or(false);
+                                window.is_visible().unwrap_or(false)
+                                    && !window.is_focused().unwrap_or(false);
 
                             if should_hide {
                                 let _ = window.hide();
@@ -387,10 +387,5 @@ mod tests {
             false,
             resize_after_blur
         ));
-    }
-
-    #[test]
-    fn converts_physical_width_to_logical_width_without_outer_frame_drift() {
-        assert_eq!(physical_to_logical(840, 1.5), 560.0);
     }
 }
