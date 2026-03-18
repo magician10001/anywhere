@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+src-tauri/target/
+tsconfig.tsbuildinfo
+.DS_Store
+Thumbs.db
+.vscode/
+.superpowers/
