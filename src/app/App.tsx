@@ -1,11 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  currentMonitor,
-  getCurrentWindow,
-  LogicalSize,
-  PhysicalPosition
-} from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import {
   applySessionAction,
@@ -26,14 +21,11 @@ import {
   saveSettings
 } from "../features/settings/settings-store";
 import {
-  clampPanelHeight,
-  getPanelAnchor,
+  getEditorLayout,
+  getScrollIndicatorLayout,
   PANEL_DEFAULT_HEIGHT,
-  PANEL_DEFAULT_WIDTH,
-  PANEL_MARGINS,
   PANEL_MAX_HEIGHT,
-  PANEL_MIN_HEIGHT,
-  PANEL_MIN_WIDTH
+  PANEL_MIN_HEIGHT
 } from "../features/window/panel-metrics";
 import { getPanelShortcutAction } from "../features/window/panel-shortcuts";
 import { useScrollIndicator } from "../features/window/use-scroll-indicator";
@@ -89,6 +81,10 @@ function currentWindowLabel(): "main" | "settings" {
   return getCurrentWindow().label === "settings" ? "settings" : "main";
 }
 
+const SCROLL_INDICATOR_HEIGHT = 38;
+const SCROLL_INDICATOR_TOP_INSET = 12;
+const SCROLL_INDICATOR_BOTTOM_INSET = 12;
+
 export function App() {
   const [windowKind] = useState<"main" | "settings">(() => currentWindowLabel());
   const [settings, setSettings] = useState(() => loadSettings());
@@ -103,8 +99,16 @@ export function App() {
   const [pendingConflict, setPendingConflict] = useState<Extract<ResolveEditorResult, { kind: "conflict" }> | null>(null);
   const [hotkeyDraft, setHotkeyDraft] = useState(settings.hotkey);
   const [panelHeight, setPanelHeight] = useState(PANEL_DEFAULT_HEIGHT);
+  const [textareaHeight, setTextareaHeight] = useState<number | null>(null);
+  const [textareaOverflowY, setTextareaOverflowY] = useState<"hidden" | "auto">("hidden");
+  const [isPanelCapped, setIsPanelCapped] = useState(false);
+  const [manualHeightLocked, setManualHeightLocked] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [scrollIndicatorOffsetY, setScrollIndicatorOffsetY] = useState(SCROLL_INDICATOR_TOP_INSET);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const editorSurfaceRef = useRef<HTMLLabelElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const isProgrammaticResizeRef = useRef(false);
   const { visible: showScrollIndicator, onScroll: handleScrollIndicator } = useScrollIndicator();
   const previewHtml = previewMarkdown(state.text);
 
@@ -166,6 +170,7 @@ export function App() {
     }
 
     let unlisten: (() => void) | undefined;
+    let unlistenResize: (() => void) | undefined;
 
     void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) {
@@ -175,8 +180,22 @@ export function App() {
       unlisten = nextUnlisten;
     });
 
+    void getCurrentWindow().onResized(({ payload: size }) => {
+      const scaleFactor = window.devicePixelRatio || 1;
+      const nextLogicalHeight = Math.round(size.height / scaleFactor);
+
+      setPanelHeight(nextLogicalHeight);
+
+      if (!isProgrammaticResizeRef.current) {
+        setManualHeightLocked(true);
+      }
+    }).then((nextUnlistenResize) => {
+      unlistenResize = nextUnlistenResize;
+    });
+
     return () => {
       unlisten?.();
+      unlistenResize?.();
     };
   }, [windowKind]);
 
@@ -190,50 +209,80 @@ export function App() {
       return;
     }
 
-    const nextHeight = clampPanelHeight(textarea.scrollHeight + 56, {
-      min: PANEL_MIN_HEIGHT,
-      max: PANEL_MAX_HEIGHT
+    const previousInlineHeight = textarea.style.height;
+    textarea.style.height = "auto";
+    const currentPanelClientHeight = panelRef.current?.getBoundingClientRect().height ?? panelHeight;
+
+    const nextLayout = getEditorLayout({
+      currentPanelHeight: Math.round(currentPanelClientHeight),
+      editorScrollHeight: textarea.scrollHeight,
+      chromeHeight: 56,
+      minPanelHeight: PANEL_MIN_HEIGHT,
+      maxPanelHeight: PANEL_MAX_HEIGHT,
+      manualHeightLocked
     });
 
-    setPanelHeight(nextHeight);
+    setTextareaHeight(nextLayout.textareaHeight);
+    setTextareaOverflowY(nextLayout.overflowY);
+    setIsPanelCapped(nextLayout.capped);
+
+    textarea.style.height = nextLayout.textareaHeight === null ? "" : `${nextLayout.textareaHeight}px`;
 
     if (!isTauriRuntime()) {
+      setPanelHeight(nextLayout.panelHeight);
       return;
     }
 
     async function syncPanelGeometry() {
-      const monitor = await currentMonitor();
-      const scaleFactor = monitor?.scaleFactor ?? 1;
-      const currentSize = await getCurrentWindow().outerSize();
-      const nextWidth = Math.max(PANEL_MIN_WIDTH, Math.round(currentSize.width / scaleFactor) || PANEL_DEFAULT_WIDTH);
-      const nextLogicalHeight = Math.max(Math.round(currentSize.height / scaleFactor), nextHeight);
-      const physicalPanelSize = {
-        width: Math.round(nextWidth * scaleFactor),
-        height: Math.round(nextLogicalHeight * scaleFactor)
-      };
-
-      await getCurrentWindow().setSize(new LogicalSize(nextWidth, nextLogicalHeight));
-
-      if (!monitor) {
+      if (manualHeightLocked) {
         return;
       }
 
-      const anchor = getPanelAnchor(
-        {
-          x: monitor.workArea.position.x,
-          y: monitor.workArea.position.y,
-          width: monitor.workArea.size.width,
-          height: monitor.workArea.size.height
-        },
-        physicalPanelSize,
-        PANEL_MARGINS
-      );
+      const currentSize = await getCurrentWindow().innerSize();
+      const scaleFactor = window.devicePixelRatio || 1;
+      const currentLogicalHeight = Math.round(currentSize.height / scaleFactor) || PANEL_DEFAULT_HEIGHT;
+      const nextLogicalHeight = nextLayout.capped
+        ? Math.max(currentLogicalHeight, nextLayout.panelHeight)
+        : nextLayout.panelHeight;
 
-      await getCurrentWindow().setPosition(new PhysicalPosition(anchor.x, anchor.y));
+      setPanelHeight(nextLogicalHeight);
+
+      if (nextLogicalHeight === currentLogicalHeight) {
+        return;
+      }
+
+      isProgrammaticResizeRef.current = true;
+
+      try {
+        await invoke("sync_main_panel_height", {
+          height: nextLogicalHeight
+        });
+      } finally {
+        window.setTimeout(() => {
+          isProgrammaticResizeRef.current = false;
+        }, 0);
+      }
     }
 
     void syncPanelGeometry();
-  }, [pendingConflict, state.text, windowKind]);
+  }, [manualHeightLocked, panelHeight, pendingConflict, state.text, windowKind]);
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    setScrollIndicatorOffsetY(
+      getScrollIndicatorLayout({
+        scrollProgress,
+        viewportHeight: textarea.clientHeight,
+        indicatorHeight: SCROLL_INDICATOR_HEIGHT,
+        topInset: SCROLL_INDICATOR_TOP_INSET,
+        bottomInset: SCROLL_INDICATOR_BOTTOM_INSET
+      }).offsetY
+    );
+  }, [panelHeight, scrollProgress, state.text, textareaOverflowY]);
 
   function hydrateEditor(clipboardText: string, draft: DraftSnapshot | null) {
     const resolved = resolveEditorContent({
@@ -369,6 +418,7 @@ export function App() {
     }
 
     try {
+      setManualHeightLocked(true);
       await invoke("set_main_panel_resize_state", { resizing: true });
       await getCurrentWindow().startResizeDragging(direction);
     } catch {
@@ -446,8 +496,9 @@ export function App() {
   return (
     <main className="panel-frame">
       <section
-        className="panel panel-shell main-window-panel"
-        style={{ minHeight: `${Math.max(panelHeight, PANEL_DEFAULT_HEIGHT)}px` }}
+        ref={panelRef}
+        className={`panel panel-shell main-window-panel ${isPanelCapped ? "is-capped" : ""}`}
+        style={{ height: `${Math.max(panelHeight, PANEL_DEFAULT_HEIGHT)}px` }}
       >
         {PANEL_RESIZE_DIRECTIONS.map((direction) => (
           <button
@@ -494,7 +545,9 @@ export function App() {
           </p>
         </header>
 
-        <section className={`editor-layout panel-editor ${state.previewOpen ? "with-preview" : ""}`}>
+        <section
+          className={`editor-layout panel-editor ${state.previewOpen ? "with-preview" : ""} ${isPanelCapped ? "is-capped" : ""} ${pendingConflict ? "has-conflict" : ""}`}
+        >
           {pendingConflict ? (
             <section className="conflict-banner" aria-live="polite">
               <div>
@@ -512,9 +565,14 @@ export function App() {
             </section>
           ) : null}
 
-          <label className="editor-surface">
+          <label ref={editorSurfaceRef} className={`editor-surface ${isPanelCapped ? "is-scrollable" : ""}`}>
             <span className="visually-hidden">Editor</span>
             <textarea
+              style={
+                textareaHeight === null
+                  ? { overflowY: textareaOverflowY }
+                  : { height: `${textareaHeight}px`, overflowY: textareaOverflowY }
+              }
               onKeyDown={(event) => {
                 const action = getPanelShortcutAction(event);
 
@@ -549,7 +607,7 @@ export function App() {
             <span
               aria-hidden="true"
               className={`scroll-indicator ${showScrollIndicator ? "visible" : ""}`}
-              style={{ transform: `translateY(${scrollProgress * 100}%)` }}
+              style={{ transform: `translateY(${scrollIndicatorOffsetY}px)` }}
             />
           </label>
 
